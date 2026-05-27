@@ -111,3 +111,84 @@ git push
 ## 🌐 Repository
 
 [https://github.com/udaykryadav/VectorShift](https://github.com/udaykryadav/VectorShift)
+
+---
+
+## ✅ Assessment Progress
+
+### Part 1 — Node Abstraction
+
+**Problem:** All four original nodes (`inputNode`, `outputNode`, `llmNode`, `textNode`) duplicated the same JSX structure — fixed-size div, border, Handle imports, and local state boilerplate.
+
+**Solution:** Created a `BaseNode` component that accepts pure config objects, so adding a new node requires zero boilerplate.
+
+#### What was built
+
+**`frontend/src/nodes/BaseNode.js`** — Core abstraction component.  
+Accepts these props:
+
+| Prop | Type | Purpose |
+|------|------|---------|
+| `id` | string | Node ID from ReactFlow |
+| `title` | string | Header label |
+| `color` | string | Header accent color |
+| `icon` | string | Emoji shown in header |
+| `fields[]` | array | Input fields to render |
+| `handles[]` | array | ReactFlow handles (ports) |
+
+Each `field` object:
+```js
+{ name, label, type, defaultValue, options, placeholder, rows }
+// type: 'text' | 'select' | 'textarea' | 'number'
+```
+
+Each `handle` object:
+```js
+{ id, type, position, label, style }
+// position: 'left' | 'right'
+// type: 'source' | 'target'
+```
+
+**`frontend/src/nodes/BaseNode.css`** — Shared premium dark-theme styles for all nodes.
+
+#### Refactored existing nodes
+
+All 4 original nodes were rewritten as thin wrappers around `BaseNode`:
+
+```js
+// Before (inputNode.js) — ~48 lines of mixed JSX + logic
+export const InputNode = ({ id, data }) => {
+  const [currName, setCurrName] = useState(...);
+  const [inputType, setInputType] = useState(...);
+  // ... manual onChange handlers, JSX layout ...
+};
+
+// After — 20 lines of pure config
+export const InputNode = ({ id, data }) => (
+  <BaseNode id={id} title="Input" icon="📥" color="#059669"
+    fields={[
+      { name: 'inputName', label: 'Name', type: 'text', defaultValue: ... },
+      { name: 'inputType', label: 'Type', type: 'select', options: [...] },
+    ]}
+    handles={[{ id: 'value', type: 'source', position: 'right' }]}
+  />
+);
+```
+
+#### Five new nodes (demonstrating the abstraction)
+
+| Node | File | Handles | Fields |
+|------|------|---------|--------|
+| 📝 Note | `noteNode.js` | None | Content (textarea) |
+| 🔍 Filter | `filterNode.js` | 1 in / 1 out | Condition (select), Match Value (text) |
+| ➕ Math | `mathNode.js` | 2 in (A, B) / 1 out | Operator (select) |
+| 🌐 API Request | `apiNode.js` | 1 in / 1 out | Method (select), URL (text) |
+| 🔀 Classifier | `classifierNode.js` | 1 in / 2 out (True/False) | Condition (text) |
+
+Each new node was created in **~15 lines** using `BaseNode`, with no repeated code.
+
+#### Toolbar & UI updates
+
+- `toolbar.js` — nodes grouped into **Core / Logic / Utility** sections with color-coded drag chips
+- `ui.js` — all 9 node types registered in the `nodeTypes` map
+- `draggableNode.js` — accepts a `color` prop so toolbar chips match their node's header color
