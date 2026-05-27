@@ -192,3 +192,57 @@ Each new node was created in **~15 lines** using `BaseNode`, with no repeated co
 - `toolbar.js` — nodes grouped into **Core / Logic / Utility** sections with color-coded drag chips
 - `ui.js` — all 9 node types registered in the `nodeTypes` map
 - `draggableNode.js` — accepts a `color` prop so toolbar chips match their node's header color
+
+---
+
+### Part 2 — Styling
+
+**Goal:** Transform the unstyled UI into a polished, unified dark-theme design.
+
+#### Files changed
+
+| File | What changed |
+|------|-------------|
+| `src/index.css` | Full dark-theme reset — Inter font, global colors, custom scrollbars, ReactFlow edge/control overrides |
+| `src/App.js` | Added branded header with VectorShift logo, gradient wordmark, live status badge, and flex layout |
+| `src/submit.js` | Replaced plain `<button>` with a gradient submit button that calls the backend and displays results |
+| `src/ui.js` | Canvas fills the flex container properly (`100%` height instead of fixed `70vh`) |
+| `src/nodes/BaseNode.css` | Premium dark card nodes with hover effects, styled handles, port labels, and Inter font throughout |
+
+#### Design decisions
+
+- **Color palette**: Deep navy (`#0d0e1a`) background with indigo (`#6366f1`) / violet (`#8b5cf6`) as accent colors
+- **Node cards**: Dark glass-style cards with colored headers per node type, subtle border glow on hover
+- **Toolbar**: Nodes grouped into **Core / Logic / Utility** with color-coded chips matching their node header
+- **Submit bar**: Gradient button with lift animation on hover; shows backend response inline (nodes count, edges count, DAG status)
+- **ReactFlow canvas**: Dark grid, glowing indigo edges, styled minimap and controls
+
+---
+
+### Part 3 — Text Node Logic
+
+**Goal:** Make the Text node resize dynamically and create new connection handles for each `{{variable}}` defined in the text.
+
+#### What was built
+
+`textNode.js` was fully rewritten as a standalone component (keeping BaseNode CSS classes for visual consistency) with two new behaviours:
+
+**1. Auto-resize (width + height)**
+
+- **Height**: A `useEffect` on the textarea resets the height to `auto` then sets it to `scrollHeight` on every keystroke — textarea grows line-by-line, no scroll bar
+- **Width**: The longest line character count is measured and converted to pixels (`≈ 7.2px/char + padding`), clamped between `220px` and `520px` — node widens as you type long lines
+
+**2. Dynamic `{{variable}}` handles**
+
+- A regex `/\{\{\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\}\}/g` scans the text on every change
+- Each unique valid JS variable name gets a **target Handle** added to the left side, evenly spaced
+- Port labels and indigo chip badges appear inside the node showing active variables
+- Removing `{{varName}}` from the text removes the corresponding handle
+
+#### Example
+
+```
+Input text:  "Translate {{text}} from {{lang}} to English"
+→ Creates two left handles:  [text]  [lang]
+→ Node width expands to fit the full line
+```
