@@ -23,6 +23,21 @@ export const SubmitButton = () => {
         body:    JSON.stringify({ nodes, edges }),
       });
       const data = await resp.json();
+
+      // ── User-friendly alert ──────────────────────────────────────────────
+      const { num_nodes, num_edges, is_dag } = data;
+      if (num_nodes !== undefined) {
+        const dagLabel = is_dag ? '✅ Yes — this pipeline is a valid DAG.' : '❌ No — this pipeline contains a cycle.';
+        alert(
+          `📊 Pipeline Analysis\n` +
+          `────────────────────\n` +
+          `🔵 Nodes   : ${num_nodes}\n` +
+          `🔗 Edges   : ${num_edges}\n` +
+          `🔄 Is DAG  : ${dagLabel}`
+        );
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       setResult({ ok: true, data });
     } catch {
       setResult({ ok: false, message: 'Could not reach backend.' });

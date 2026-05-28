@@ -97,7 +97,8 @@ git push
 |---------|---------|
 | `fastapi` | Web framework |
 | `uvicorn` | ASGI server |
-| `python-multipart` | Required for Form data parsing |
+| `pydantic` | Request body validation & parsing |
+| `python-multipart` | Multipart form support |
 
 ### Frontend
 | Package | Purpose |
@@ -246,3 +247,130 @@ Input text:  "Translate {{text}} from {{lang}} to English"
 → Creates two left handles:  [text]  [lang]
 → Node width expands to fit the full line
 ```
+
+---
+
+### Part 4 — Backend Integration
+
+**Goal:** Wire the frontend Submit button to a real FastAPI endpoint that counts nodes/edges and checks whether the pipeline is a Directed Acyclic Graph (DAG), then surface the result to the user as a browser alert.
+
+---
+
+#### What was required
+
+1. **Frontend** — `submit.js` must `POST` the current nodes and edges to `http://localhost:8000/pipelines/parse` and show an `alert()` with the response.
+2. **Backend** — `/pipelines/parse` must accept JSON, count nodes & edges, detect cycles, and return `{ num_nodes, num_edges, is_dag }`.
+
+---
+
+#### Backend — `backend/main.py`
+
+**Problems with the original stub:**
+- The route was `GET` — browsers and `fetch()` with a body require `POST`.
+- It accepted a raw `Form` string instead of structured JSON.
+- It always returned `{'status': 'parsed'}` and did no real computation.
+- No CORS headers — the React dev server on port 3000 would be blocked by browsers.
+
+**What was changed:**
+
+| Area | Before | After |
+|------|--------|-------|
+| HTTP method | `GET` | `POST` |
+| Request format | `Form(...)` string | Pydantic model `{ nodes: List[Any], edges: List[Any] }` |
+| CORS | None | `CORSMiddleware(allow_origins=["*"])` |
+| Response | `{'status': 'parsed'}` | `{'num_nodes': int, 'num_edges': int, 'is_dag': bool}` |
+
+**DAG detection — Kahn's Algorithm (BFS topological sort):**
+
+```python
+def is_dag(nodes, edges) -> bool:
+    # 1. Build in-degree map and adjacency list from edges
+    in_degree = {n["id"]: 0 for n in nodes}
+    adj = defaultdict(list)
+    for edge in edges:
+        src, tgt = edge["source"], edge["target"]
+        adj[src].append(tgt)
+        in_degree[tgt] += 1
+
+    # 2. Kahn's BFS — start from all zero-in-degree nodes
+    queue = deque(nid for nid, deg in in_degree.items() if deg == 0)
+    visited = 0
+    while queue:
+        node = queue.popleft()
+        visited += 1
+        for neighbour in adj[node]:
+            in_degree[neighbour] -= 1
+            if in_degree[neighbour] == 0:
+                queue.append(neighbour)
+
+    # 3. If every node was visited → no cycle → is a DAG
+    return visited == len(nodes)
+```
+
+Why Kahn's algorithm?  
+- O(V + E) time and space — optimal for any graph size.
+- Naturally handles disconnected subgraphs and isolated nodes.
+- No recursion → no stack-overflow risk on very large pipelines.
+
+---
+
+#### Frontend — `frontend/src/submit.js`
+
+The file already had the correct `fetch` call structure from Part 2 styling work. Two additions were made:
+
+1. **Alert on success** — immediately after `resp.json()` resolves, a formatted `alert()` is fired:
+
+```js
+const { num_nodes, num_edges, is_dag } = data;
+if (num_nodes !== undefined) {
+  const dagLabel = is_dag
+    ? '✅ Yes — this pipeline is a valid DAG.'
+    : '❌ No — this pipeline contains a cycle.';
+  alert(
+    `📊 Pipeline Analysis\n` +
+    `────────────────────\n` +
+    `🔵 Nodes   : ${num_nodes}\n` +
+    `🔗 Edges   : ${num_edges}\n` +
+    `🔄 Is DAG  : ${dagLabel}`
+  );
+}
+```
+
+2. The existing inline result badge below the button is kept — it shows the same info persistently after the alert is dismissed.
+
+---
+
+#### End-to-end flow
+
+```
+User builds pipeline
+       │
+       ▼
+[⚡ Submit Pipeline] clicked
+       │
+       ▼
+fetch POST /pipelines/parse
+  body: { nodes: [...], edges: [...] }
+       │
+       ▼
+FastAPI counts nodes/edges
+Runs Kahn's BFS DAG check
+Returns { num_nodes, num_edges, is_dag }
+       │
+       ▼
+browser alert() shows results
+  "Nodes: 3  ·  Edges: 2  ·  Is DAG: ✅ Yes"
+       │
+       ▼
+Inline badge below button updates
+```
+
+---
+
+#### Verified test cases
+
+| Input | Expected | Result |
+|-------|----------|--------|
+| 3 nodes, 2 edges (1→2→3, linear) | `is_dag: true` | ✅ Correct |
+| 2 nodes, 2 edges (1→2, 2→1, cycle) | `is_dag: false` | ✅ Correct |
+| 0 nodes, 0 edges (empty canvas) | `is_dag: true` | ✅ Correct |
